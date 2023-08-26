@@ -64,10 +64,7 @@ def get_sessions(user_id, verbose=False):
 
     Returns list of sessions for the specified user.
     """
-    user = User.query.get(user_id)
-    if user:
-        return user.sessions
-    return []
+    return user.sessions if (user := User.query.get(user_id)) else []
 
 
 def get_tasks(session_uid):
@@ -77,8 +74,7 @@ def get_tasks(session_uid):
     `Optional`
     :param int session_id:  Session ID 
     """
-    session = Session.query.filter_by(uid=session_uid).first()
-    if session:
+    if session := Session.query.filter_by(uid=session_uid).first():
         return session.tasks
     return []
 
@@ -92,13 +88,12 @@ def get_tasks_paginated(session_id, page=1):
 
     Returns list of tasks for the specified session, and total pages of tasks.
     """
-    session = Session.query.filter_by(id=session_id).first()
-    if session:
+    if session := Session.query.filter_by(id=session_id).first():
         tasks = session.tasks
         # janky manual pagination
         pages = int(math.ceil(float(len(tasks))/20.0))
-        blocks = [i for i in xrange(0, len(tasks), 20)]
-        if (page - 1 >= 0) and (page + 1 <= len(blocks)):
+        blocks = list(xrange(0, len(tasks), 20))
+        if page >= 1 and page + 1 <= len(blocks):
             start, end = blocks[page - 1:page + 1]
             if (start >= 0) and (end <= len(tasks)):
                 return tasks[start:end], pages
@@ -118,8 +113,7 @@ def add_file(owner, filename, session, module):
     :param str session:         public IP of session
     :param str module:          module name (keylogger, screenshot, upload, etc.)
     """
-    user = User.query.filter_by(username=owner).first()
-    if user:  
+    if user := User.query.filter_by(username=owner).first():
         exfiltrated_file = ExfiltratedFile(filename=filename,
                                            session=session,
                                            module=module,
@@ -135,10 +129,7 @@ def get_files(user_id):
     `Required`
     :param int user_id:         user ID
     """
-    user = User.query.get(user_id)
-    if user:  
-        return user.files
-    return []
+    return user.files if (user := User.query.get(user_id)) else []
 
 
 
@@ -152,10 +143,7 @@ def get_payloads(user_id):
     `Required`
     :param int user_id:         user ID
     """
-    user = User.query.get(user_id)
-    if user:
-        return user.payloads
-    return []
+    return user.payloads if (user := User.query.get(user_id)) else []
 
 
 def add_payload(user_id, filename, operating_system, architecture):
@@ -168,8 +156,7 @@ def add_payload(user_id, filename, operating_system, architecture):
     :param str operating_system:    nix, win, mac
     :param str architecture:        x32, x64, arm64v8/debian, arm32v7/debian, i386/debian
     """
-    user = User.query.get(user_id)
-    if user:
+    if user := User.query.get(user_id):
         payload = Payload(filename=filename, 
                           operating_system=operating_system,
                           architecture=architecture,
@@ -201,29 +188,25 @@ def handle_session(session_dict):
 
     session = Session.query.filter_by(uid=session_dict['uid']).first()
 
-    if not session:
-        # get new session id
-        user = User.query.filter_by(username=session_dict['owner']).first()
-        if user:
-            sessions = user.sessions
-            if sessions:
-                session_dict['id'] = 1 + max([s.id for s in sessions])
-            else:
-                session_dict['id'] = 1
-
-            # add new session
-            session = Session(**session_dict)
-            db.session.add(session)
-
-            # update number of bots
-            user.bots += 1
-        else:
-            util.log("User not found: " + session_dict['owner'])
-    else:
+    if session:
         # set session status to online
         session.online = True
         session.last_online = datetime.utcnow()
 
+    elif user := User.query.filter_by(username=session_dict['owner']).first():
+        session_dict['id'] = (
+            1 + max(s.id for s in sessions)
+            if (sessions := user.sessions)
+            else 1
+        )
+        # add new session
+        session = Session(**session_dict)
+        db.session.add(session)
+
+        # update number of bots
+        user.bots += 1
+    else:
+        util.log("User not found: " + session_dict['owner'])
     session.new = True
 
     db.session.commit()
@@ -248,7 +231,9 @@ def handle_task(task_dict):
 
     """
     if not isinstance(task_dict, dict):
-        task_dict = {'result': 'Error: client returned invalid response: "{}"'.format(str(task_dict))}
+        task_dict = {
+            'result': f'Error: client returned invalid response: "{str(task_dict)}"'
+        }
     if not task_dict.get('uid'):
         identity = str(str(task_dict.get('session')) + str(task_dict.get('task')) + datetime.utcnow().__str__()).encode()
         task_dict['uid'] = hashlib.md5(identity).hexdigest()
@@ -257,11 +242,9 @@ def handle_task(task_dict):
         db.session.add(task)
         # encode datetime object as string so it will be JSON serializable
         task_dict['issued'] = task_dict.get('issued').__str__()
-    else:
-        task = Task.query.filter_by(uid=task_dict.get('uid')).first()
-        if task:
-            task.result = task_dict.get('result')
-            task.completed = datetime.utcnow()
+    elif task := Task.query.filter_by(uid=task_dict.get('uid')).first():
+        task.result = task_dict.get('result')
+        task.completed = datetime.utcnow()
 
     db.session.commit()
     return task_dict
@@ -275,8 +258,7 @@ def update_session_status(session_uid, status):
     :param int session_id:      Session UID
     :param bool status:         True (online), False (offline)
     """
-    session = Session.query.filter_by(uid=session_uid).first()
-    if session:
+    if session := Session.query.filter_by(uid=session_uid).first():
         session.online = bool(status)
         db.session.commit()
 

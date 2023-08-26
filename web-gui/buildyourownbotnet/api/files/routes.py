@@ -27,7 +27,7 @@ def file_add():
 		if b64_data.startswith('_b64'):
 			data = base64.b64decode(b64_data[6:]).decode('ascii')
 		else:
-			print('/api/file/add error: invalid data ' + str(data))
+			print(f'/api/file/add error: invalid data {str(data)}')
 			return
 	try:
 		session = base64.b64decode(session)
@@ -39,7 +39,7 @@ def file_add():
 	if not filetype:
 		filetype = '.dat'
 	elif not filetype.startswith('.'):
-		filetype = '.' + filetype
+		filetype = f'.{filetype}'
 
 	# generate random filename if not specified
 	if not filename:

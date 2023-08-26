@@ -28,7 +28,7 @@ class Loader(object):
 
     def __init__(self, modules, base_url):
         self.module_names = modules
-        self.base_url = base_url + '/'
+        self.base_url = f'{base_url}/'
         self.non_source = False
         self.reload = False
         '''
@@ -37,20 +37,20 @@ class Loader(object):
 
     def find_module(self, fullname, path=None):
         log(level='debug', info= "FINDER=================")
-        log(level='debug', info= "Searching: %s" % fullname)
-        log(level='debug', info= "Path: %s" % path)
+        log(level='debug', info=f"Searching: {fullname}")
+        log(level='debug', info=f"Path: {path}")
         log(level='info', info= "Checking if in declared remote module names...")
-        if fullname.split('.')[0] not in self.module_names + list(set([_.split('.')[0] for _ in self.module_names])):
+        if fullname.split('.')[0] not in self.module_names + list(
+            {_.split('.')[0] for _ in self.module_names}
+        ):
             log(level='info', info= "[-] Not found!")
             return None
         log(level='info', info= "Checking if built-in....")
-        try:
+        with contextlib.suppress(ImportError):
             file, filename, description = imp.find_module(fullname.split('.')[-1], path)
             if filename:
                 log(level='info', info= "[-] Found locally!")
                 return None
-        except ImportError:
-            pass
         log(level='info', info= "Checking if it is name repetition... ")
         if fullname.split('.').count(fullname.split('.')[-1]) > 1:
             log(level='info', info= "[-] Found locally!")
@@ -62,7 +62,7 @@ class Loader(object):
         is_package,final_url,source_code=msg
         self.mod_msg.setdefault(fullname,MsgClass(is_package,final_url,source_code))
         '''
-        log(level='info', info= "[+] Module/Package '%s' can be loaded!" % fullname)
+        log(level='info', info=f"[+] Module/Package '{fullname}' can be loaded!")
         return self
 
     def load_module(self, name):
@@ -71,48 +71,54 @@ class Loader(object):
         '''
         imp.acquire_lock()
         log(level='debug', info= "LOADER=================")
-        log(level='debug', info= "Loading %s..." % name)
+        log(level='debug', info=f"Loading {name}...")
         if name in sys.modules and not self.reload:
-            log(level='info', info= '[+] Module "%s" already loaded!' % name)
+            log(level='info', info=f'[+] Module "{name}" already loaded!')
             imp.release_lock()
             return sys.modules[name]
         if name.split('.')[-1] in sys.modules and not self.reload:
-            log(level='info', info= '[+] Module "%s" loaded as a top level module!' % name)
+            log(level='info', info=f'[+] Module "{name}" loaded as a top level module!')
             imp.release_lock()
             return sys.modules[name.split('.')[-1]]
-        module_url = self.base_url + '%s.py' % name.replace('.', '/')
-        package_url = self.base_url + '%s/__init__.py' % name.replace('.', '/')
-        zip_url = self.base_url + '%s.zip' % name.replace('.', '/')
+        module_url = f"{self.base_url}{name.replace('.', '/')}.py"
+        package_url = f"{self.base_url}{name.replace('.', '/')}/__init__.py"
+        zip_url = f"{self.base_url}{name.replace('.', '/')}.zip"
         final_url = None
         final_src = None
         try:
-            log(level='debug', info= "Trying to import '%s' as package from: '%s'" % (name, package_url))
+            log(
+                level='debug',
+                info=f"Trying to import '{name}' as package from: '{package_url}'",
+            )
             package_src = None
             if self.non_source:
                 package_src = self.__fetch_compiled(package_url)
-            if package_src == None:
+            if package_src is None:
                 package_src = urlopen(package_url).read()
             final_src = package_src
             final_url = package_url
         except IOError as e:
             package_src = None
-            log(level='info', info= "[-] '%s' is not a package (%s)" % (name, str(e)))
-        if final_src == None:
+            log(level='info', info=f"[-] '{name}' is not a package ({str(e)})")
+        if final_src is None:
             try:
-                log(level='debug', info= "[+] Trying to import '%s' as module from: '%s'" % (name, module_url))
+                log(
+                    level='debug',
+                    info=f"[+] Trying to import '{name}' as module from: '{module_url}'",
+                )
                 module_src = None
                 if self.non_source:
                     module_src = self.__fetch_compiled(module_url)
-                if module_src == None:
+                if module_src is None:
                     module_src = urlopen(module_url).read()
                 final_src = module_src
                 final_url = module_url
             except IOError as e:
                 module_src = None
-                log(level='info', info= "[-] '%s' is not a module (%s)" % (name, str(e)))
+                log(level='info', info=f"[-] '{name}' is not a module ({str(e)})")
                 imp.release_lock()
                 return None
-        log(level='debug', info= "[+] Importing '%s'" % name)
+        log(level='debug', info=f"[+] Importing '{name}'")
         mod = imp.new_module(name)
         mod.__loader__ = self
         mod.__file__ = final_url
@@ -121,10 +127,10 @@ class Loader(object):
         else:
             mod.__package__ = name
             mod.__path__ = ['/'.join(mod.__file__.split('/')[:-1]) + '/']
-        log(level='debug', info= "[+] Ready to execute '%s' code" % name)
+        log(level='debug', info=f"[+] Ready to execute '{name}' code")
         sys.modules[name] = mod
         exec(final_src, mod.__dict__)
-        log(level='info', info= "[+] '%s' imported succesfully!" % name)
+        log(level='info', info=f"[+] '{name}' imported succesfully!")
         imp.release_lock()
         return mod
     
@@ -157,29 +163,25 @@ class Loader(object):
     
     def __fetch_compiled(self, url):
         import marshal
-        module_src = None
         try:
-            module_compiled = urlopen(url + 'c').read()
-            try:
-                module_src = marshal.loads(module_compiled[8:])
-                return module_src
-            except ValueError:
-                pass
-            try:
-                module_src = marshal.loads(module_compiled[12:])  # Strip the .pyc file header of Python 3.3 and onwards (changed .pyc spec)
-                return module_src
-            except ValueError:
-                pass
+            module_compiled = urlopen(f'{url}c').read()
+            with contextlib.suppress(ValueError):
+                return marshal.loads(module_compiled[8:])
+            with contextlib.suppress(ValueError):
+                return marshal.loads(module_compiled[12:])
         except IOError as e:
-            log(level='debug', info= "[-] No compiled version ('.pyc') for '%s' module found!" % url.split('/')[-1])
-        return module_src
+            log(
+                level='debug',
+                info=f"[-] No compiled version ('.pyc') for '{url.split('/')[-1]}' module found!",
+            )
+        return None
 
 def __create_github_url(username, repo, branch='master'):
     github_raw_url = 'https://raw.githubusercontent.com/{user}/{repo}/{branch}/'
     return github_raw_url.format(user=username, repo=repo, branch=branch)
 
 def _add_git_repo(url_builder, username=None, repo=None, module=None, branch=None, commit=None):
-    if username == None or repo == None:
+    if username is None or repo is None:
         raise Exception("'username' and 'repo' parameters cannot be None")
     if commit and branch:
         raise Exception("'branch' and 'commit' parameters cannot be both set!")
@@ -208,11 +210,10 @@ def remove_remote_repo(base_url):
     Function that removes from the 'sys.meta_path' an Loader object given its HTTP/S URL.
     """
     for importer in sys.meta_path:
-        try:
+        with contextlib.suppress(AttributeError):
             if importer.base_url.startswith(base_url):  # an extra '/' is always added
                 sys.meta_path.remove(importer)
                 return True
-        except AttributeError as e: pass
     return False
 
 @contextlib.contextmanager

@@ -73,12 +73,11 @@ def login():
 
 	if form.validate_on_submit():
 		user = User.query.filter_by(username=form.username.data).first()
-		if user:
-			# password authentication
-			if user and bcrypt.check_password_hash(user.password, form.password.data):
-				login_user(user)
-				next_page = request.args.get('next')
-				return redirect(next_page) if next_page else redirect(url_for('main.sessions'))
+		# password authentication
+		if user and bcrypt.check_password_hash(user.password, form.password.data):
+			login_user(user)
+			next_page = request.args.get('next')
+			return redirect(next_page) if next_page else redirect(url_for('main.sessions'))
 		flash("Invalid username/password.", 'danger')
 	return render_template("login.html", form=form, title="Log In")
 
